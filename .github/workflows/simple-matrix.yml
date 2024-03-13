@@ -1,0 +1,10 @@
+name: Simple Matrix
+on: workflow_dispatch
+jobs:
+  simple-matrix:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: 
+        node_version: [12, 14, 18] 
+    steps:
+    - run: echo "Node version is ${{ matrix.node_version }}"
