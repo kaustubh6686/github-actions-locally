@@ -1,0 +1,82 @@
+name: Deploy to ASG
+on: 
+  push:
+    branches:
+      - 'development'
+  release:
+    types: [published]
+env:
+  AWS_REGION: ap-south-1
+  S3_BUCKET: some-bucket-name
+  DEV_INSTANCE_NAME: gridmaster-dev-asg
+  PRD_ASG_NAME: production-autoscaling-group-name
+  
+jobs:
+  get_env_name:
+    runs-on: ubuntu-latest
+    outputs:
+      env_name: ${{ steps.detect_trigger.outputs.env_name }}
+    steps:
+      - name: Detect trigger
+        id: detect_trigger
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" == "push" ]; then
+            echo "This workflow was triggered by a push event."
+            echo "env_name=dev" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event_name }}" == "release" ]; then
+            echo "This workflow was triggered by a release published event."
+            echo "env_name=prd" >> $GITHUB_OUTPUT
+          else
+            echo "Unknown trigger."
+          fi
+        
+  # test:
+  #   runs-on: ubuntu-latest
+  #   needs: get_env_name
+  #   steps:
+  #     - name: 'Output'
+  #       run: echo "ENV NAME => ${{needs.get_env_name.outputs.env_name}}"
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: get_env_name
+    steps:
+      - name: "Configure AWS Credentials"
+        uses: aws-actions/configure-aws-credentials@v4.0.2
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      - name: Deploy DEV
+        if: ${{ needs.get_env_name.outputs.env_name == 'dev' }}
+        id: deploy_dev
+        run: |
+          aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --region${{ env.AWS_REGION }} \
+            --profile gridmaster_kaustubh \
+            --parameters 'commands=[
+                    "cd /var/www/html/gridmaster-backend",
+                    "sudo git pull",
+                    "rm -rf /var/www/html/gridmaster-backend/.env /var/www/html/gridmaster-backend/service_account.json",
+                    "aws s3 cp s3://${{ env.S3_BUCKET }}/config/dev/.env /var/www/html/gridmaster-backend/gridmaster_backend/.env",
+                    "aws s3 cp s3://${{ env.S3_BUCKET }}/config/dev/service_account.json /var/www/html/gridmaster-backend/service_account.json"
+                    "sudo docker-compose -f docker-compose.yml down -v",
+                    "sudo docker-compose -f docker-compose.yml up -d --build"
+                ]' \
+            --targets "Key=tag:Name,Values=${{ env.DEV_INSTANCE_NAME }}"
+
+      - name: Deploy PRD
+        if: ${{ needs.get_env_name.outputs.env_name == 'prd' }}
+        id: deploy_prd
+        run: |
+          aws autoscaling start-instance-refresh -
+            -region ${{ env.AWS_REGION }} \
+            --auto-scaling-group-name ${{ env.PRD_ASG_NAME }} \
+            --preferences '{"InstanceWarmup": 60, "MinHealthyPercentage": 50, "ScaleInProtectedInstances": "Ignore", "StandbyInstances": "Terminate"}'
+
+
+######## TO TEST LOCALLY ##########
+
+# act --workflows '.github/workflows/deploy-to-asg-using-ssm-send-command.yml' -e 'payload/event.json' --var-file 'payload/.vars' --env-file 'payload/.env' --secret-file 'payload/.secrets' --detect-event --container-architecture linux/amd64

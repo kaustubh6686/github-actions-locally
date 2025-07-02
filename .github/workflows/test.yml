@@ -1,0 +1,19 @@
+name: Deploy to ASG using SSM Send Command
+
+on: 
+  # push:
+  #   branches:
+  #       - 'master'
+  #       - 'development'
+  release:
+    types: [published]
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+env:
+  AWS_REGION: ap-south-1
+jobs:
+  test:
+      runs-on: ubuntu-latest
+      steps:
+        - name: 'Output'
+          run: echo "OUTPUT => ${{ github.event_name }}"

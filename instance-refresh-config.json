@@ -1,0 +1,9 @@
+{
+    "AutoScalingGroupName": "gridmaster-prd-ap-south-1",
+    "Preferences": {
+        "InstanceWarmup": 60,
+        "MinHealthyPercentage": 50,
+        "ScaleInProtectedInstances": "Ignore",
+        "StandbyInstances": "Terminate"
+    }
+}

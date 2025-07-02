@@ -1,0 +1,28 @@
+name: Dynamic Matrix
+on: workflow_dispatch
+jobs:
+  generate_matrix:
+    name: Generate Matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.generate_matrix.outputs.matrix }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate Matrix
+        shell: bash
+        id: generate_matrix
+        run: |
+          echo 'PWD'
+          pwd
+          echo 'LS'
+          ls
+          ./generate_matrix.py
+  use_generated_matrix:
+    runs-on: ubuntu-latest
+    needs: generate_matrix
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.generate_matrix.outputs.matrix) }}
+    steps:
+    - run: echo "Node version is ${{ matrix.node }}"
